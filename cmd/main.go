@@ -17,7 +17,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	e.POST("/convert-pdf", func(c echo.Context) error {
+	e.POST("api/golang/convert-pdf", func(c echo.Context) error {
 		form, err := c.MultipartForm()
 
 		if err != nil {
