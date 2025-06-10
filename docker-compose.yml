@@ -1,0 +1,12 @@
+version: '3'
+services:
+    personiway-golang:
+        container_name: personiway-golang-${ENV}
+        image: personiway-golang:${TAG}
+        ports:
+            - '127.0.0.1:${PORT:-1323}:1323'
+        volumes:
+            - '.env:/app/.env'
+        restart: always
+volumes:
+  goservice:

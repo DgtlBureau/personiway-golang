@@ -1,0 +1,72 @@
+name: Deploy
+env:
+  REPO_NAME         : ${{ github.event.repository.name }}
+  ANTROPIC_API_KEY  : ${{ secrets.ANTROPIC_API_KEY }}
+  URL_LARAVEL       : ${{ github.ref == 'refs/heads/dev' && secrets.URL_LARAVEL_DEV || secrets.URL_LARAVEL_PROD }}
+  ENV               : ${{ github.ref == 'refs/heads/dev' && 'devops' || 'prod' }}
+
+on:
+  push:
+    branches:
+      - devops
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  deploy-dev:
+    if: github.ref == 'refs/heads/devops'
+    runs-on: dev
+    steps:
+
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v3.x
+
+      - name: Git clone
+        uses: actions/checkout@v3
+        with:
+          path: ${{ env.ENV }}
+      
+      - name: Add .env
+        run: |
+         cd ${{ env.ENV }}; URL_LARAVEL=${{ env.URL_LARAVEL }} ANTROPIC_API_KEY=${{ env.ANTROPIC_API_KEY }} envsubst < .env.example > .env
+        
+      - name: echo .env
+        run: |
+         cd ${{ env.ENV }}; cat .env
+        
+      - name: Build containers
+        run: |
+          cd ${{ env.ENV }}; docker build --label VERSION=${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} -t personiway-golang:${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} .
+      
+      - name: Run containers
+        run: |
+          cd ${{ env.ENV }}; TAG=${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} docker compose -f docker-compose.yml up -d
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: prod
+    steps:
+
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v3.x
+
+      - name: Git clone
+        uses: actions/checkout@v3
+        with:
+          path: ${{ env.ENV }}
+      
+      - name: Add .env
+        run: |
+         cd ${{ env.ENV }}; URL_LARAVEL=${{ env.URL_LARAVEL }} ANTROPIC_API_KEY=${{ env.ANTROPIC_API_KEY }} envsubst < .env.example > .env
+        
+      - name: echo .env
+        run: |
+         cd ${{ env.ENV }}; cat .env
+        
+      - name: Build containers
+        run: |
+          cd ${{ env.ENV }}; docker build --label VERSION=${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} -t personiway-golang:${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} .
+      
+      - name: Run containers
+        run: |
+          cd ${{ env.ENV }}; TAG=${{ github.run_number }}-${{ env.GITHUB_SHA_SHORT }}-${{ env.GITHUB_REF_SLUG }} docker compose -f docker-compose.yml up -d
