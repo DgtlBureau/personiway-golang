@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,27 +13,32 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
-	"bytes"
 )
 
-var laravel_api string = os.Getenv("URL_LARAVEL");
+var laravel_api string = os.Getenv("URL_LARAVEL")
 
 func Convert(file multipart.File) {
-	tempPDF := fmt.Sprintf("/tmp/input_%d.pdf", time.Now().UnixNano())
+	tempFile, err := os.CreateTemp("", fmt.Sprintf("input_%d_*.pdf", time.Now().UnixNano()))
+	if err != nil {
+		log.Printf("failed to create temp file: %v", err)
+		return
+	}
+	tempPDF := tempFile.Name()
+	tempFile.Close()
 	defer os.Remove(tempPDF)
-	
+
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		log.Printf("failed to read file: %v", err)
 		return
 	}
-	
+
 	err = os.WriteFile(tempPDF, fileBytes, 0644)
 	if err != nil {
 		log.Printf("failed to write temp PDF: %v", err)
 		return
 	}
-	
+
 	err = convertPDFToPNG(tempPDF)
 	if err != nil {
 		log.Printf("failed to convert PDF: %v", err)
@@ -42,21 +48,21 @@ func Convert(file multipart.File) {
 
 func convertPDFToPNG(pdfPath string) error {
 	baseName := fmt.Sprintf("page_%d", time.Now().UnixNano())
-	
-	cmd := exec.Command("pdftoppm", 
-		"-png",           
-		"-r", "300",      
-		pdfPath,          
+
+	cmd := exec.Command("pdftoppm",
+		"-png",
+		"-r", "300",
+		pdfPath,
 		baseName)
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("pdftoppm error: %v, output: %s", err, string(output))
 		return err
 	}
-	
+
 	log.Printf("Successfully converted PDF to images")
-	
+
 	return processGeneratedImages(baseName)
 }
 
@@ -66,28 +72,28 @@ func processGeneratedImages(baseName string) error {
 	if err != nil {
 		return fmt.Errorf("error finding generated images: %v", err)
 	}
-	
+
 	if len(files) == 0 {
 		return fmt.Errorf("no images were generated")
 	}
-	
+
 	log.Printf("Found %d generated images", len(files))
-	
+
 	for i, file := range files {
 		log.Printf("Processing image: %s", file)
-		
+
 		imageData, err := os.ReadFile(file)
 		if err != nil {
 			log.Printf("Error reading %s: %v", file, err)
 			continue
 		}
-		
+
 		go func(data []byte, pageNum int, filename string) {
 			defer os.Remove(filename)
-			
+
 			result := sendToAntropic(data)
 
-			go func(){
+			go func() {
 				var requestBody bytes.Buffer
 				writer := multipart.NewWriter(&requestBody)
 
@@ -101,7 +107,7 @@ func processGeneratedImages(baseName string) error {
 
 				writer.Close()
 
-				req, _ := http.NewRequest("POST", laravel_api + "admin/save-pdf-schemas", &requestBody)
+				req, _ := http.NewRequest("POST", laravel_api+"admin/save-pdf-schemas", &requestBody)
 				req.Header.Set("Content-Type", writer.FormDataContentType())
 
 				client := &http.Client{}
@@ -110,7 +116,7 @@ func processGeneratedImages(baseName string) error {
 
 		}(imageData, i, file)
 	}
-	
+
 	return nil
 }
 
@@ -126,7 +132,7 @@ func sendToAntropic(imageData []byte) string {
 	request := map[string]interface{}{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 4000,
-		"system": "Please return only the JSON object in the response, without introduction, conclusion, or explanation. The response must contain only valid JSON for php json_decode() function.",
+		"system":     "Please return only the JSON object in the response, without introduction, conclusion, or explanation. The response must contain only valid JSON for php json_decode() function.",
 		"messages": []map[string]interface{}{
 			{
 				"role": "user",
