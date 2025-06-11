@@ -18,7 +18,16 @@ import (
 var laravel_api string = os.Getenv("URL_LARAVEL")
 
 func Convert(file multipart.File) {
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("input_%d_*.pdf", time.Now().UnixNano()))
+	tempDir := os.TempDir()
+	log.Printf("Using temp directory: %s", tempDir)
+
+	err := os.MkdirAll(tempDir, 0755)
+	if err != nil {
+		log.Printf("failed to create temp directory: %v", err)
+		return
+	}
+
+	tempFile, err := os.CreateTemp(tempDir, fmt.Sprintf("input_%d_*.pdf", time.Now().UnixNano()))
 	if err != nil {
 		log.Printf("failed to create temp file: %v", err)
 		return
